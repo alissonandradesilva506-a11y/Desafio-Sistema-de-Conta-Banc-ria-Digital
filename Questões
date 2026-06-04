@@ -1,0 +1,308 @@
+2. Implemente as classes SaldoInsuficienteException eOperacaoInvalidaException. Para cada uma:
+a. Escreva a classe completa com atributos e construtores.
+public class SaldoInsuficienteException extends RuntimeException {
+    public SaldoInsuficienteException(String mensagem) {
+            super(mensagem);
+    }
+}
+public class OperacaoInvalidaException extends Exception {
+    public OperacaoInvalidaException(String mensagem) {
+            super(mensagem);
+    }
+}
+
+b. Justifique a escolha de Checked vs Unchecked para cada exceção.
+SaldoInsuficienteException é considerado Unchecked porque é uma condição que não pode ser resolvida
+pelo programa sem intervenção do usuário.
+
+OperacaoInvalidaException é Checked porque essa é uma condição que pode ser ativada quando uma
+regra de negócio for violada por fatores externos como uma conta bloqueada que deve ser verificada.
+
+3. Implemente a classe abstrata ContaBancaria e as interfaces Tributavel e Bloqueavel.
+a. Escreva a classe abstrata com atributos, construtor e métodos.
+public abstract class ContaBancaria implements Bloqueavel {
+    protected String numero;
+    protected String titular;
+    protected double saldo;
+    protected boolean ativa;
+    
+    public class SaldoInsuficienteException extends RuntimeException {
+        public SaldoInsuficienteException(String mensagem) {
+            super(mensagem);
+        }
+    }
+    
+    public class OperacaoInvalidaException extends Exception {
+        public OperacaoInvalidaException(String mensagem) {
+            super(mensagem);
+        }
+    }
+    
+    public ContaBancaria(String numero, String titular) {
+        if (titular == null || titular.trim().isEmpty()) {
+            throw new IllegalArgumentException("O titular não pode ser nulo ou vazio.");
+        }
+        this.numero = numero;
+        this.titular = titular;
+        this.saldo = 0.0;
+        this.ativa = true; // Conta inicia ativa
+    }
+
+    public abstract double calcularRendimento();
+
+    public void depositar(double valor) {
+        if (valor <= 0) {
+            throw new IllegalArgumentException("O valor de depósito deve ser maior que zero.");
+        }
+        this.saldo += valor;
+    }
+
+    public void sacar(double valor) throws OperacaoInvalidaException {
+        if (!ativa) {
+            throw new OperacaoInvalidaException("Não é possível realizar saque: a conta está bloqueada.");
+        }
+        if (valor <= 0) {
+            throw new IllegalArgumentException("O valor de saque deve ser maior que zero.");
+        }
+    }
+
+    @Override
+    public void bloquear() {
+        this.ativa = false;
+    }
+
+    @Override
+    public void desbloquear() {
+        this.ativa = true;
+    }
+
+    @Override
+    public boolean isAtiva() {
+        return this.ativa;
+    }
+
+    public double getSaldo() {
+        return saldo;
+    }
+
+    public String getTitular() {
+        return titular;
+    }
+}
+
+b. Escreva as duas interfaces.
+public interface Bloqueavel {
+    void bloquear();
+    void desbloquear();
+    boolean isAtiva();
+}
+public interface Tributavel {
+    double calcularImposto();
+}
+
+4. Implemente as três subclasses e uma classe Main para testar o sistema.
+a. Implemente ContaCorrente, ContaPoupanca e ContaSalario com seus comportamentos específicos.
+public class ContaCorrente extends ContaBancaria implements Tributavel {
+    private static final double LIMITE_CHEQUE_ESPECIAL = 1000.0;
+    private static final double TAXA_IMPOSTO_SAQUE = 0.0038; // 0.38%
+
+    public ContaCorrente(String numero, String titular) {
+        super(numero, titular);
+    }
+
+    @Override
+    public double calcularRendimento() {
+        return 0; // Não rende
+    }
+
+    @Override
+    public double calcularImposto() {
+        return 0; // O imposto é calculado pontualmente no saque
+    }
+
+    @Override
+    public void sacar(double valor) throws OperacaoInvalidaException {
+        super.sacar(valor); // Validações básicas (ativo e valor > 0)
+
+        double saldoDisponivel = this.saldo + LIMITE_CHEQUE_ESPECIAL;
+        double imposto = valor * TAXA_IMPOSTO_SAQUE;
+        double totalNecessario = valor + imposto;
+
+        if (saldoDisponivel < totalNecessario) {
+            throw new SaldoInsuficienteException("Saldo e limite do cheque especial insuficientes para cobrir o saque e as taxas.");
+        }
+
+        this.saldo -= totalNecessario;
+    }
+}
+
+public class ContaPoupanca extends ContaBancaria implements Tributavel {
+    private static final double TAXA_RENDIMENTO = 0.005; // 0.5% ao mês
+    private static final double TAXA_IMPOSTO_RENDIMENTO = 0.225; // 22.5% sobre o rendimento
+
+    public ContaPoupanca(String numero, String titular) {
+        super(numero, titular);
+    }
+
+    @Override
+    public double calcularRendimento() {
+        return this.saldo * TAXA_RENDIMENTO;
+    }
+
+    @Override
+    public double calcularImposto() {
+        return calcularRendimento() * TAXA_IMPOSTO_RENDIMENTO;
+    }
+
+    @Override
+    public void sacar(double valor) throws OperacaoInvalidaException {
+        super.sacar(valor);
+
+        // Regra simplificada: mínimo 30 dias (não simulada dinamicamente nesta base simples)
+        if (this.saldo < valor) {
+            throw new SaldoInsuficienteException("Saldo insuficiente para saque.");
+        }
+
+        this.saldo -= valor;
+    }
+}
+
+public class ContaSalario extends ContaBancaria {
+    private boolean saqueRealizadoNoMes;
+
+    public ContaSalario(String numero, String titular) {
+        super(numero, titular);
+        this.saqueRealizadoNoMes = false;
+    }
+
+    @Override
+    public double calcularRendimento() {
+        return 0; // Não rende
+    }
+
+    @Override
+    public void sacar(double valor) throws OperacaoInvalidaException {
+        super.sacar(valor);
+
+        if (saqueRealizadoNoMes) {
+            throw new OperacaoInvalidaException("Conta Salário permite apenas 1 saque por mês.");
+        }
+
+        if (this.saldo < valor) {
+            throw new SaldoInsuficienteException("Saldo insuficiente para saque.");
+        }
+
+        this.saldo -= valor;
+        this.saqueRealizadoNoMes = true; // Registra que o saque foi feito
+    }
+
+    // Método para resetar o mês (simulação)
+    public void novoMes() {
+        this.saqueRealizadoNoMes = false;
+    }
+}
+
+b. Na Main, crie uma List<ContaBancaria> com pelo menos um de cada tipo eitere chamando calcularRendimento().
+import java.util.ArrayList;
+import java.util.List;
+
+public class Main {
+    public static void main(String[] args) {
+        List<ContaBancaria> contas = new ArrayList<>();
+
+        contas.add(new ContaCorrente("1234-5", "Ana Souza"));
+        contas.add(new ContaPoupanca("6789-0", "Bruno Silva"));
+        contas.add(new ContaSalario("1111-2", "Carla Oliveira"));
+
+        // Demonstração do Polimorfismo e chamadas
+        for (ContaBancaria conta : contas) {
+            System.out.println("Titular: " + conta.getTitular() + " | Tipo: " + conta.getClass().getSimpleName());
+            System.out.printf("Rendimento calculado: R$ %.2f%n", conta.calcularRendimento());
+            
+            if (conta instanceof Tributavel) {
+                Tributavel tributavel = (Tributavel) conta;
+                System.out.printf("Imposto calculado: R$ %.2f%n", tributavel.calcularImposto());
+            } else {
+                System.out.println("Imposto: Isento");
+            }
+            System.out.println("--------------------------------------------------");
+        }
+
+        // Demonstração de Operação Inválida (Conta Bloqueada)
+        try {
+            ContaBancaria contaTeste = contas.get(0);
+            contaTeste.bloquear();
+            contaTeste.sacar(100.0);
+        } catch (OperacaoInvalidaException e) {
+            System.out.println("Exceção capturada com sucesso: " + e.getMessage());
+        }
+    }
+}
+
+c. Provoque e trate ambas as exceções dentro da Main.
+import java.util.ArrayList;
+import java.util.List;
+
+public class Main {
+    public static void main(String[] args) {
+        // Criando as contas
+        ContaCorrente cc = new ContaCorrente("1234-5", "Ana Silva");
+        ContaPoupanca cp = new ContaPoupanca("6789-0", "Bruno Costa");
+        ContaSalario cs = new ContaSalario("1112-3", "Carla Souza");
+
+        // Polimorfismo: Armazenando em uma lista
+        List<ContaBancaria> contas = new ArrayList<>();
+        contas.add(cc);
+        contas.add(cp);
+        contas.add(cs);
+
+        System.out.println("--- DEMONSTRANDO POLIMORFISMO: RENDIMENTOS ---");
+        for (ContaBancaria conta : contas) {
+            System.out.println("Titular: " + conta.getTitular() + 
+                               " | Rendimento projetado: R$ " + conta.calcularRendimento());
+        }
+
+        System.out.println("\n--- TESTE DE OPERAÇÕES E EXCEÇÕES ---");
+
+        // Operações comuns e provocação de erros
+        try {
+            cc.depositar(500.0);
+            cc.sacar(100.0); // Irá cobrar imposto
+
+            cp.depositar(1000.0);
+            
+            // 1. PROVOCANDO SaldoInsuficienteException em Conta Poupança
+            System.out.println("\nTentando sacar R$ 2000 na poupança (SaldoInsuficienteException):");
+            cp.sacar(2000.0);
+            
+        } catch (SaldoInsuficienteException e) {
+            System.err.println("Erro capturado: " + e.getMessage());
+        } catch (OperacaoInvalidaException e) {
+            System.err.println("Erro capturado: " + e.getMessage());
+        }
+
+        try {
+            // 2. PROVOCANDO OperacaoInvalidaException bloqueando a Conta Corrente
+            System.out.println("\nBloqueando a Conta Corrente e tentando sacar (OperacaoInvalidaException):");
+            cc.bloquear();
+            cc.sacar(50.0);
+            
+        } catch (OperacaoInvalidaException e) {
+            System.err.println("Erro capturado: " + e.getMessage());
+        } catch (SaldoInsuficienteException e) {
+            System.err.println("Erro capturado: " + e.getMessage());
+        }
+        
+        try {
+            // 3. Testando Conta Salário (máximo 1 saque)
+            cs.depositar(2000.0);
+            cs.sacar(500.0); // Primeiro saque OK
+            
+            System.out.println("\nTentando fazer o segundo saque no mês na Conta Salário:");
+            cs.sacar(100.0);
+        } catch (OperacaoInvalidaException | SaldoInsuficienteException e) {
+             System.err.println("Erro capturado na Conta Salário: " + e.getMessage());
+        }
+    }
+}
+
